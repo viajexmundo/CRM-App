@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pandoc \"/Users/macbookpro/Downloads/Especificación detallada de un CRM dedicado para una agencia de viajes mediana.docx\" -o /tmp/crm_spec.md)",
+      "Bash(pip3 install defusedxml)",
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "WebSearch",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --yes)",
+      "Bash(npx create-next-app@latest leads-crm --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --yes)",
+      "Bash(cp -r leads-crm/* .)",
+      "Bash(cp leads-crm/.gitignore .)",
+      "Bash(cp leads-crm/.eslintrc.json .)",
+      "Bash(cp -r leads-crm/.git .)",
+      "Bash(rm -rf leads-crm)",
+      "Bash(npm install @prisma/client next-auth@beta @auth/prisma-adapter @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities @tanstack/react-query zustand zod react-hook-form @hookform/resolvers bcryptjs date-fns lucide-react sonner)",
+      "Bash(npm install -D prisma @types/bcryptjs better-sqlite3 @types/better-sqlite3)"
+    ]
+  }
+}
