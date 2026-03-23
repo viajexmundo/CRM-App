@@ -1,0 +1,426 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== AUTH & USERS ====================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         String   @default("VENDEDOR") // VENDEDOR, COACH, ADMIN, CONTABILIDAD
+  avatarUrl    String?
+  googleSub    String?  @unique
+  googleCalendarEmail String?
+  googleAccessToken    String?
+  googleRefreshToken   String?
+  googleTokenExpiresAt DateTime?
+  googleConnectedAt    DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedLeads         Lead[]
+  assignedOpportunities Opportunity[]
+  assignedCases         Case[]
+  activities            Activity[]
+  coachSessions         CoachingSession[] @relation("coach")
+  coacheeSessions       CoachingSession[] @relation("coachee")
+  tasks                 Task[]
+  checkInItems          CheckInItem[]
+}
+
+// ==================== CONTACTS & LEADS ====================
+
+model Contact {
+  id               String   @id @default(cuid())
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  secondaryPhone   String?
+  type             String   @default("LEISURE") // LEISURE, CORPORATE
+  company          String?
+  position         String?
+  passportOrDpi    String?
+  preferredChannel String?  // WHATSAPP, EMAIL, PHONE, SMS
+  source           String   @default("OTHER")
+  consentStatus    String   @default("PENDING") // PENDING, GRANTED, REVOKED
+  consentDate      DateTime?
+  country          String?
+  timezone         String?
+  language         String   @default("es")
+  tags             String   @default("[]")
+  notes            String?
+  normalizedEmail  String?
+  normalizedPhone  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  leads         Lead[]
+  opportunities Opportunity[]
+  messages      Message[]
+  documents     Document[]
+  activities    Activity[]
+  cases         Case[]
+}
+
+model Lead {
+  id             String    @id @default(cuid())
+  contactId      String
+  contact        Contact   @relation(fields: [contactId], references: [id])
+  assignedToId   String?
+  assignedTo     User?     @relation(fields: [assignedToId], references: [id])
+  status         String    @default("NUEVO") // NUEVO, CONTACTADO, CALIFICADO, DESCALIFICADO, CONVERTIDO
+  score          Int       @default(0)
+  source         String    @default("OTHER")
+  interest       String?
+  budget         Float?
+  budgetCurrency String    @default("GTQ")
+  travelDates    String?   // JSON: { from, to, flexible }
+  passengers     Int?
+  destination    String?
+  travelMotif    String?
+  notes          String?
+  qualifiedAt    DateTime?
+  convertedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  opportunities Opportunity[]
+  activities    Activity[]
+}
+
+// ==================== OPPORTUNITIES & PIPELINE ====================
+
+model Opportunity {
+  id              String    @id @default(cuid())
+  title           String
+  contactId       String
+  contact         Contact   @relation(fields: [contactId], references: [id])
+  leadId          String?
+  lead            Lead?     @relation(fields: [leadId], references: [id])
+  assignedToId    String
+  assignedTo      User      @relation(fields: [assignedToId], references: [id])
+  stage           String    @default("LEAD_NUEVO")
+  previousStage   String?
+  probability     Int       @default(10)
+  estimatedValue  Float     @default(0)
+  currency        String    @default("GTQ")
+
+  // Next Step (mandatory for stage transitions)
+  nextStepType    String?
+  nextStepAction  String?
+  nextStepDate    DateTime?
+  nextStepChannel String?
+
+  // Diagnosis fields
+  segment          String?
+  travelMotif      String?
+  destination      String?
+  departureDate    DateTime?
+  returnDate       DateTime?
+  passengers       Int?
+  priorities       String?   // JSON array
+  restrictions     String?   // JSON array
+  budgetMin        Float?
+  budgetMax        Float?
+  budgetCurrency   String    @default("GTQ")
+  decisionMaker    String?
+  decisionCriteria String?
+  specialRequests  String?
+  diagnosisAnswers String?   // JSON: { questionKey: selectedValue }
+  diagnosisScore   Int?      // 0-100 calculated score
+
+  // Close info
+  closeReason     String?
+  closedAt        DateTime?
+  lostReason      String?
+
+  score           Int       @default(0)
+  stageChangedAt  DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  bookings        Booking[]
+  cases           Case[]
+  activities      Activity[]
+  stageHistory    StageTransition[]
+  tasks           Task[]
+  followUps       FollowUp[]
+  actions         OpportunityAction[]
+}
+
+model StageTransition {
+  id            String      @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  fromStage     String
+  toStage       String
+  reason        String?
+  changedById   String
+  createdAt     DateTime    @default(now())
+}
+
+// ==================== BOOKINGS & PAYMENTS ====================
+
+model Booking {
+  id              String   @id @default(cuid())
+  opportunityId   String
+  opportunity     Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  supplier        String
+  confirmationNum String?
+  pnr             String?
+  status          String   @default("PENDING")
+  type            String   @default("OTHER")
+  details         String?
+  amount          Float    @default(0)
+  currency        String   @default("GTQ")
+  checkIn         DateTime?
+  checkOut        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tickets Ticket[]
+}
+
+model Ticket {
+  id            String   @id @default(cuid())
+  bookingId     String
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  ticketNum     String
+  passengerName String
+  status        String   @default("ACTIVE")
+  issuedAt      DateTime @default(now())
+}
+
+// ==================== POST-SALE / CASES ====================
+
+model Case {
+  id            String       @id @default(cuid())
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  contactId     String
+  contact       Contact      @relation(fields: [contactId], references: [id])
+  assignedToId  String
+  assignedTo    User         @relation(fields: [assignedToId], references: [id])
+  type          String       @default("GENERAL")
+  priority      String       @default("MEDIUM")
+  status        String       @default("OPEN")
+  subject       String
+  description   String
+  slaHours      Int          @default(24)
+  slaDeadline   DateTime
+  slaBreached   Boolean      @default(false)
+  resolvedAt    DateTime?
+  closedAt      DateTime?
+  resolution    String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  activities Activity[]
+}
+
+// ==================== ACTIVITIES & TASKS ====================
+
+model Activity {
+  id            String       @id @default(cuid())
+  type          String
+  title         String?
+  description   String
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+  contactId     String?
+  contact       Contact?     @relation(fields: [contactId], references: [id])
+  leadId        String?
+  lead          Lead?        @relation(fields: [leadId], references: [id])
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  caseId        String?
+  case          Case?        @relation(fields: [caseId], references: [id])
+  metadata      String?
+  createdAt     DateTime     @default(now())
+}
+
+model Task {
+  id            String       @id @default(cuid())
+  title         String
+  description   String?
+  type          String       @default("FOLLOW_UP")
+  status        String       @default("PENDING")
+  priority      String       @default("MEDIUM")
+  dueDate       DateTime?
+  completedAt   DateTime?
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  isRecurring   Boolean      @default(false)
+  recurringRule String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// ==================== MESSAGES ====================
+
+model Message {
+  id         String    @id @default(cuid())
+  contactId  String
+  contact    Contact   @relation(fields: [contactId], references: [id])
+  channel    String
+  direction  String
+  subject    String?
+  body       String
+  templateId String?
+  sentAt     DateTime?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// ==================== DOCUMENTS ====================
+
+model Document {
+  id         String   @id @default(cuid())
+  contactId  String?
+  contact    Contact? @relation(fields: [contactId], references: [id])
+  name       String
+  type       String   @default("OTHER")
+  url        String
+  size       Int      @default(0)
+  mimeType   String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+}
+
+// ==================== COACHING ====================
+
+model CoachingSession {
+  id          String   @id @default(cuid())
+  coachId     String
+  coach       User     @relation("coach", fields: [coachId], references: [id])
+  coacheeId   String
+  coachee     User     @relation("coachee", fields: [coacheeId], references: [id])
+  date        DateTime
+  duration    Int      @default(30)
+  type        String   @default("GENERAL")
+  notes       String?
+  scores      String?
+  actionItems String?
+  audioUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==================== FOLLOW-UP TRACKING ====================
+
+model FollowUpConfig {
+  id         String   @id @default(cuid())
+  stepKey    String   @unique // CONFIRMACION, CORTO, VALOR, URGENCIA, CIERRE, FINAL
+  label      String
+  description String?
+  dayOffset  Int      @default(0)  // Days after entering COTIZACION_EN_SEGUIMIENTO
+  hourOffset Int      @default(0)  // Additional hours offset (for day 0)
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model FollowUp {
+  id            String       @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity  @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  stepKey       String       // CONFIRMACION, CORTO, VALOR, URGENCIA, CIERRE, FINAL
+  label         String       // Snapshot of label at creation
+  scheduledAt   DateTime     // When this follow-up should happen
+  completedAt   DateTime?    // When it was completed
+  completedById String?      // User who completed it
+  notes         String?
+  status        String       @default("PENDING") // PENDING, COMPLETED, SKIPPED
+  googleEventId String?
+  googleEventUserId String?
+  googleEventHtmlLink String?
+  googleEventStatus String?
+  googleEventUpdatedAt DateTime?
+  googleMeetLink String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// ==================== OPPORTUNITY ACTIONS (action log) ====================
+
+model OpportunityAction {
+  id            String       @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity  @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  type          String       // CALL, EMAIL, MEETING, WHATSAPP, etc.
+  action        String       // Description of the action
+  channel       String?      // WHATSAPP, EMAIL, PHONE, etc.
+  scheduledAt   DateTime?    // When it was scheduled
+  completedAt   DateTime?    // When it was completed (null = pending)
+  completedById String?      // User who completed it
+  notes         String?
+  status        String       @default("PENDING") // PENDING, COMPLETED
+  googleEventId String?
+  googleEventUserId String?
+  googleEventHtmlLink String?
+  googleEventStatus String?
+  googleEventUpdatedAt DateTime?
+  googleMeetLink String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model CheckInTemplate {
+  id        String   @id @default(cuid())
+  title     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CheckInItem {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  date        DateTime
+  title       String
+  source      String   @default("TEMPLATE") // TEMPLATE | CUSTOM
+  templateId  String?
+  sortOrder   Int      @default(0)
+  isCompleted Boolean  @default(false)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, date, title])
+}
+
+// ==================== TEMPLATES ====================
+
+model Template {
+  id        String   @id @default(cuid())
+  name      String
+  channel   String
+  category  String   @default("GENERAL")
+  purpose   String   @default("GENERAL") // GENERAL, ASSIGNMENT_NOTIFICATION
+  stage     String?  // Pipeline stage for contextual templates
+  targetRole String? // VENDEDOR, COACH, ADMIN, CONTABILIDAD
+  subject   String?
+  body      String
+  variables String   @default("[]")
+  isActive  Boolean  @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
